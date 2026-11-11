@@ -58,7 +58,9 @@ pl.scan_parquet('<dir>/date=*/*.parquet', hive_partitioning=True)
 
 Use the glob. The bare directory fails while a `.tmp` file exists.
 
-When `<dir>` contains a glob character, write it in the DuckDB pattern inside its own brackets so it matches literally: `[` as `[[]`, `]` as `[]]`, `*` as `[*]`, `?` as `[?]`. For example, `/data/logs[1]` becomes `/data/logs[[]1[]]/date=*/*.parquet`.
+When `<dir>` contains a glob character, write it inside its own brackets so it matches literally: `[` as `[[]`, `]` as `[]]`, `*` as `[*]`, `?` as `[?]`. For example, `/data/logs[1]` becomes `/data/logs[[]1[]]/date=*/*.parquet`. This applies to both the DuckDB and the polars pattern. Without it the pattern can match a different directory, such as `/data/logs1`, and return its rows with no error.
+
+`<dir>` must not contain a backslash, except as a path separator on Windows. DuckDB cannot list files below such a directory, so `duckmon::open` refuses it.
 
 pandas or pyarrow:
 

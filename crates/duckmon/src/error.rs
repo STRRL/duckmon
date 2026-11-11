@@ -10,6 +10,8 @@ pub enum Error {
     File(std::io::Error),
     /// An event could not be stored, for example because its time is before 1970.
     InvalidEvent(String),
+    /// The store directory path cannot be used.
+    InvalidDirectory(String),
     /// The store is closed or its writer thread has stopped.
     Closed,
 }
@@ -20,6 +22,7 @@ impl fmt::Display for Error {
             Error::Database(err) => write!(f, "database error: {err}"),
             Error::File(err) => write!(f, "file error: {err}"),
             Error::InvalidEvent(reason) => write!(f, "invalid event: {reason}"),
+            Error::InvalidDirectory(reason) => write!(f, "invalid directory: {reason}"),
             Error::Closed => write!(f, "store is closed"),
         }
     }
@@ -30,7 +33,7 @@ impl std::error::Error for Error {
         match self {
             Error::Database(err) => Some(err),
             Error::File(err) => Some(err),
-            Error::InvalidEvent(_) | Error::Closed => None,
+            Error::InvalidEvent(_) | Error::InvalidDirectory(_) | Error::Closed => None,
         }
     }
 }

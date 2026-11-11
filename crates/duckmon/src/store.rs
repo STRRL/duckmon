@@ -28,8 +28,17 @@ pub struct Store {
 }
 
 /// Opens a store that writes to and reads from `dir`. Creates `dir` when missing.
+/// Outside Windows, a path that contains a backslash returns `InvalidDirectory`.
 pub fn open(dir: impl AsRef<Path>, options: Options) -> Result<Store> {
     let dir = dir.as_ref().to_path_buf();
+    // DuckDB cannot find files below a directory whose name contains a
+    // backslash, so the data would be written but never read back.
+    if !cfg!(windows) && dir.to_string_lossy().contains('\\') {
+        return Err(Error::InvalidDirectory(format!(
+            "{} contains a backslash",
+            dir.display()
+        )));
+    }
     std::fs::create_dir_all(&dir)?;
 
     let writer_conn =
