@@ -32,8 +32,39 @@ Readers that use hive partitioning also get `date DATE`. It is the UTC calendar 
 - `<writer ID>` is a UUID v7 written as 32 lowercase hex characters. Each `open` creates a new one.
 - `<sequence>` is a counter per writer. It starts at 1, is written with 8 digits padded with zeros, and is never reused.
 - A file that is still being written is named `.<writer ID>-<sequence>.parquet.tmp` in the same directory, and is renamed when it is complete. Readers ignore these files.
-- Files never change after they are renamed. Each one carries the Parquet key value metadata `duckmon_contract = '1'`.
-- Many processes may write to one directory at the same time. Each one only adds its own files. There are no locks.
+- Files never change after they are renamed. Each one carries the Parquet key value metadata `duckmon_contract = '1'`. A finished file can later be deleted by compaction or retention.
+- Many processes may write to one directory at the same time. Each one only adds its own files. Writers never lock.
+
+### Internal names
+
+Any name under `<dir>` that starts with `.` is internal, and readers ignore it:
+
+- `.compact.lock` in `<dir>`.
+- `.deleting-date=YYYY-MM-DD-<run ID>` directories in `<dir>`, made while retention deletes a day.
+- `.<writer ID>-<sequence>.parquet.tmp` files in day directories.
+
+duckmon never creates a dot file ending in `.parquet` in a day directory, because the DuckDB `*` pattern also matches names that start with `.`. The pattern `date=*/*.parquet` never matches the internal directories.
+
+## Compaction
+
+`compact` replaces a group of files of one day with one file. It only works on days that ended at least the settle time ago (default 1 hour), and only on files at least that old. The new file follows the normal naming rule with a writer ID of its own, and carries a second key value metadata entry, `duckmon_compacted_from`: a comma separated list of the file names, in the same directory, whose rows it holds. If a listed file still exists, it is a leftover duplicate, and the next `compact` deletes it.
+
+For each group, compaction writes the new file under a `.tmp` name, renames it into place, and then deletes the input files right away. What readers see:
+
+- A reader never sees a partly written file.
+- Once `compact` returns success, every row is in exactly one data file. Rows are never lost.
+- While one group is being replaced, from the rename of the merged file to the unlink of its last input, any read of the directory can meet that group. This window grows with the number of inputs: deleting 1500 inputs takes about 50 ms. A filter on `date` does not avoid it, because `union_by_name = true` opens the footer of every file the pattern matches.
+- A read that meets the window either fails with an IO error, because a file it listed was deleted before it opened it, or counts that group's rows twice.
+- Running the read again gives the right answer.
+- After a crash between rename and delete, duplicates stay visible until the next `compact` finishes.
+
+Run a read again when it fails with an IO error. Only days that have ended are compacted, so the directory of the current UTC day is never compacted. Only a pattern limited to that one directory, such as `<dir>/date=<today>/*.parquet`, is sure to avoid the window. Any pattern that includes a past day can meet it.
+
+`compact --dry-run` prints what it would do, changes nothing and takes no lock.
+
+Retention (`compact --keep-days N`) deletes whole `date=` directories. A day disappears in one rename, so a reader that listed its files beforehand gets an IO error, never a partial day. A writer that later writes an event for a deleted day creates that day directory again, and the next retention run deletes it again.
+
+Only `compact` takes a lock: an exclusive `flock` on `.compact.lock`. A second run waits for the first. The lock may not work across hosts on a network file system, so compact one directory from one host only.
 
 ## Change rules
 
