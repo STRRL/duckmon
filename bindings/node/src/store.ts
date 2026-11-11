@@ -11,7 +11,7 @@ export interface OpenOptions {
   flushIntervalMs?: number;
   /** How many native write batches may wait for the writer thread, from 1 to 1000000. Default 1024. */
   channelCapacity?: number;
-  /** Stored in the resource column of every event, such as `{ "service.name": "api" }`. */
+  /** Stored in the resource column of every event that sets no `resource` of its own, such as `{ "service.name": "api" }`. */
   resource?: Attributes;
   /** Events kept in JavaScript while the native writer is busy. Later events are dropped. Default 100000. */
   maxPendingEvents?: number;
