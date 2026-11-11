@@ -1,0 +1,30 @@
+{
+  "name": "duckmon",
+  "version": "0.1.0",
+  "description": "Embedded telemetry store that writes Parquet files and queries them with DuckDB",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "duckmon.node"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build-native.mjs && tsc",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "apache-arrow": "21.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
+  }
+}
