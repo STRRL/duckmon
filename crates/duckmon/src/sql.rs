@@ -1,4 +1,8 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Parquet key value metadata on a merged file: the comma separated names
+/// of the files, in the same directory, whose rows it holds.
+pub const COMPACTED_FROM_KEY: &str = "duckmon_compacted_from";
 
 /// The in memory buffer table. `date` is filled in by Rust, never by a SQL cast.
 pub const CREATE_BUFFER_TABLE: &str = "CREATE TABLE unflushed_events(
@@ -51,18 +55,40 @@ pub fn events_view_sql(dir: &Path, has_files: bool) -> String {
     if !has_files {
         return "CREATE OR REPLACE TEMP VIEW events AS SELECT * FROM unflushed_events".to_string();
     }
-    let glob = format!("{}/date=*/*.parquet", glob_escape(&dir.to_string_lossy()));
     format!(
         "CREATE OR REPLACE TEMP VIEW events AS \
-         SELECT * FROM read_parquet({}, hive_partitioning = true, union_by_name = true, hive_types = {{'date': 'DATE'}}) \
+         SELECT * FROM {} \
          UNION ALL BY NAME \
          SELECT * FROM unflushed_events",
-        sql_string_literal(&glob)
+        read_with_date_sql(&sql_string_literal(&data_glob(dir)))
     )
 }
 
-/// Writes the buffered rows of one day, `YYYY-MM-DD`, to a Parquet file.
-pub fn copy_sql(day: &str, temp_path: &Path) -> String {
+/// The pattern that matches every data file in `dir`, with `dir` escaped.
+pub fn data_glob(dir: &Path) -> String {
+    format!("{}/date=*/*.parquet", glob_escape(&dir.to_string_lossy()))
+}
+
+/// Reads Parquet files the way the contract says, with `date` from the path.
+/// `source` is a SQL string literal or list of them.
+fn read_with_date_sql(source: &str) -> String {
+    format!(
+        "read_parquet({source}, hive_partitioning = true, union_by_name = true, hive_types = {{'date': 'DATE'}})"
+    )
+}
+
+/// Reads the listed data files the way the `events` view does, `date` column included.
+pub fn read_events_sql(paths: &[PathBuf]) -> String {
+    read_with_date_sql(&file_list_literal(paths))
+}
+
+/// Whether a column is one the contract defines for data files.
+pub fn is_contract_column(column: &str) -> bool {
+    column == "ts" || column == "name" || NULLABLE_COLUMNS.contains(&column)
+}
+
+/// The columns of a data file, in file order. Used by every query that writes one.
+fn select_list() -> String {
     // DuckDB marks a Parquet column REQUIRED when the statistics of this
     // query show no NULL in it. A CASE with a NULL branch keeps the value
     // and makes the statistics allow NULL, so the column is written OPTIONAL
@@ -71,13 +97,50 @@ pub fn copy_sql(day: &str, temp_path: &Path) -> String {
         .iter()
         .map(|column| format!("CASE WHEN {column} IS NULL THEN NULL ELSE {column} END AS {column}"))
         .collect();
+    format!("ts, name, {}", nullable_columns.join(", "))
+}
+
+/// Writes the buffered rows of one day, `YYYY-MM-DD`, to a Parquet file.
+pub fn copy_sql(day: &str, temp_path: &Path) -> String {
     format!(
-        "COPY (SELECT ts, name, {} \
+        "COPY (SELECT {} \
          FROM unflushed_events WHERE date = DATE {} ORDER BY ts) \
          TO {} (FORMAT parquet, COMPRESSION zstd, KV_METADATA {{duckmon_contract: '1'}})",
-        nullable_columns.join(", "),
+        select_list(),
         sql_string_literal(day),
         sql_string_literal(&temp_path.to_string_lossy())
+    )
+}
+
+/// A SQL list of Parquet paths, such as `['a.parquet', 'b.parquet']`.
+/// Each path is glob escaped, because DuckDB treats every element as a pattern.
+pub fn file_list_literal(paths: &[PathBuf]) -> String {
+    let elements: Vec<String> = paths
+        .iter()
+        .map(|path| sql_string_literal(&glob_escape(&path.to_string_lossy())))
+        .collect();
+    format!("[{}]", elements.join(", "))
+}
+
+/// Reads data files as stored, without the `date` column from their path.
+pub fn read_files_sql(inputs: &[PathBuf]) -> String {
+    format!(
+        "read_parquet({}, union_by_name = true, hive_partitioning = false)",
+        file_list_literal(inputs)
+    )
+}
+
+/// Merges data files of one day into one Parquet file, sorted by `ts`.
+/// `compacted_from` is the comma separated list of the input file names.
+pub fn compact_copy_sql(inputs: &[PathBuf], temp_path: &Path, compacted_from: &str) -> String {
+    format!(
+        "COPY (SELECT {} FROM {} ORDER BY ts) \
+         TO {} (FORMAT parquet, COMPRESSION zstd, KV_METADATA {{duckmon_contract: '1', {}: {}}})",
+        select_list(),
+        read_files_sql(inputs),
+        sql_string_literal(&temp_path.to_string_lossy()),
+        COMPACTED_FROM_KEY,
+        sql_string_literal(compacted_from)
     )
 }
 

@@ -8,7 +8,7 @@ use duckdb::Connection;
 use duckdb::arrow::record_batch::RecordBatch;
 
 use crate::layout::{date_dir_name, file_name, temp_file_name};
-use crate::sql::{copy_sql, delete_day_sql, events_view_sql};
+use crate::sql::{copy_sql, delete_day_sql};
 use crate::store::QueryState;
 use crate::{Error, Result};
 
@@ -30,6 +30,7 @@ pub struct Writer {
     pub dir: PathBuf,
     pub writer_id: String,
     pub sequence: u64,
+    /// Held over rename and delete so a query in this process sees each row once.
     pub query_state: Arc<Mutex<QueryState>>,
 }
 
@@ -112,16 +113,12 @@ impl Writer {
 
         // Holding the query lock over rename and delete means a query in this
         // process sees each row exactly once.
-        let mut query_state = self.query_state.lock().unwrap_or_else(PoisonError::into_inner);
+        let _query_lock = self.query_state.lock().unwrap_or_else(PoisonError::into_inner);
         if let Err(err) = std::fs::rename(&temp_path, &final_path) {
             let _ = std::fs::remove_file(&temp_path);
             return Err(err.into());
         }
         self.conn.execute_batch(&delete_day_sql(day))?;
-        if !query_state.has_files {
-            query_state.conn.execute_batch(&events_view_sql(&self.dir, true))?;
-            query_state.has_files = true;
-        }
         Ok(())
     }
 

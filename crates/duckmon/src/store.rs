@@ -12,10 +12,12 @@ use crate::sql::{CREATE_BUFFER_TABLE, events_view_sql};
 use crate::writer::{Command, Writer};
 use crate::{Error, Event, Options, Result};
 
-/// The query connection and whether its `events` view already reads Parquet files.
+/// The query connection and what its `events` view reads. Only `Store::query`
+/// changes the view; the writer only takes the lock.
 pub struct QueryState {
-    pub conn: Connection,
-    pub has_files: bool,
+    conn: Connection,
+    /// None until the first query creates the view. Then whether the view reads Parquet files.
+    view_reads_files: Option<bool>,
 }
 
 /// A telemetry store bound to one directory. Safe to share between threads.
@@ -31,27 +33,18 @@ pub struct Store {
 /// Outside Windows, a path that contains a backslash returns `InvalidDirectory`.
 pub fn open(dir: impl AsRef<Path>, options: Options) -> Result<Store> {
     let dir = dir.as_ref().to_path_buf();
-    // DuckDB cannot find files below a directory whose name contains a
-    // backslash, so the data would be written but never read back.
-    if !cfg!(windows) && dir.to_string_lossy().contains('\\') {
-        return Err(Error::InvalidDirectory(format!(
-            "{} contains a backslash",
-            dir.display()
-        )));
-    }
+    check_directory(&dir)?;
     std::fs::create_dir_all(&dir)?;
 
-    let writer_conn =
-        Connection::open_in_memory_with_flags(Config::default().with("autoinstall_known_extensions", "false")?)?;
-    writer_conn.execute_batch("LOAD parquet; LOAD json;")?;
+    let writer_conn = open_connection()?;
     writer_conn.execute_batch(CREATE_BUFFER_TABLE)?;
 
-    let query_conn = writer_conn.try_clone()?;
-    let has_files = has_parquet_files(&dir)?;
-    query_conn.execute_batch(&events_view_sql(&dir, has_files))?;
+    // Only `query` creates the `events` view. Binding the view opens Parquet
+    // files, and a file that `compact` removes at that moment would make
+    // writing fail, so opening and writing never read Parquet.
     let query_state = Arc::new(Mutex::new(QueryState {
-        conn: query_conn,
-        has_files,
+        conn: writer_conn.try_clone()?,
+        view_reads_files: None,
     }));
 
     let writer = Writer {
@@ -74,6 +67,27 @@ pub fn open(dir: impl AsRef<Path>, options: Options) -> Result<Store> {
         query_state,
         writer_thread: Some(writer_thread),
     })
+}
+
+/// Returns `InvalidDirectory` outside Windows when the path contains a backslash.
+pub(crate) fn check_directory(dir: &Path) -> Result<()> {
+    // DuckDB cannot find files below a directory whose name contains a
+    // backslash, so the data would be written but never read back.
+    if !cfg!(windows) && dir.to_string_lossy().contains('\\') {
+        return Err(Error::InvalidDirectory(format!(
+            "{} contains a backslash",
+            dir.display()
+        )));
+    }
+    Ok(())
+}
+
+/// A new in memory DuckDB with the Parquet and JSON extensions loaded.
+pub(crate) fn open_connection() -> Result<Connection> {
+    let conn =
+        Connection::open_in_memory_with_flags(Config::default().with("autoinstall_known_extensions", "false")?)?;
+    conn.execute_batch("LOAD parquet; LOAD json;")?;
+    Ok(conn)
 }
 
 impl Store {
@@ -99,8 +113,14 @@ impl Store {
         answer.recv().map_err(|_| Error::Closed)?
     }
 
-    /// Runs one SQL statement. The relation `events` covers the Parquet
-    /// directory plus this process's unflushed buffer.
+    /// Runs SQL. The relation `events` covers the Parquet directory plus this
+    /// process's unflushed buffer. Rows this process writes are seen exactly once,
+    /// in a file or in the buffer.
+    /// When `sql` holds several statements, all of them run and the result of the last is returned.
+    /// While `compact` replaces a group of files of a past day, a query that reads
+    /// `events` can fail with an IO error or count that group's rows twice;
+    /// running it again gives the right answer. See `docs/contract.md`.
+    /// Always returns at least one batch, so the result schema is known even with zero rows.
     pub fn query(&self, sql: &str) -> Result<Vec<RecordBatch>> {
         let (reply, answer) = sync_channel(1);
         self.commands
@@ -109,12 +129,22 @@ impl Store {
         answer.recv().map_err(|_| Error::Closed)?;
 
         let mut query_state = self.query_state.lock().unwrap_or_else(PoisonError::into_inner);
-        if !query_state.has_files && has_parquet_files(&self.dir)? {
-            query_state.conn.execute_batch(&events_view_sql(&self.dir, true))?;
-            query_state.has_files = true;
+        // The view is created by the first query, and created again only when
+        // the directory changed between holding data files and holding none.
+        // Retention can delete every file, and a view that reads files fails
+        // when there are none.
+        let has_files = has_parquet_files(&self.dir)?;
+        if query_state.view_reads_files != Some(has_files) {
+            query_state.conn.execute_batch(&events_view_sql(&self.dir, has_files))?;
+            query_state.view_reads_files = Some(has_files);
         }
         let mut statement = query_state.conn.prepare(sql)?;
-        let batches = statement.stream_arrow([])?.collect::<duckdb::Result<Vec<_>>>()?;
+        let stream = statement.stream_arrow([])?;
+        let schema = stream.get_schema();
+        let mut batches = stream.collect::<duckdb::Result<Vec<_>>>()?;
+        if batches.is_empty() {
+            batches.push(RecordBatch::new_empty(schema));
+        }
         Ok(batches)
     }
 

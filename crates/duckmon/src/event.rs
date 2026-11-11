@@ -9,7 +9,7 @@ use duckdb::arrow::record_batch::RecordBatch;
 
 use crate::{Error, Result};
 
-const NANOS_PER_DAY: i64 = 86_400_000_000_000;
+pub const NANOS_PER_DAY: i64 = 86_400_000_000_000;
 
 /// One telemetry event: a log, a span, a metric snapshot or a plain event.
 /// See `docs/contract.md` for how each kind is stored.
