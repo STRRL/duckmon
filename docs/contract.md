@@ -9,7 +9,7 @@ Each Parquet file stores these columns, in this order:
 | column | DuckDB type | null | meaning |
 |---|---|---|---|
 | ts | TIMESTAMP_NS | no | When the event happened, UTC, nanoseconds. For a span, the start time. |
-| name | VARCHAR | no | Stable, low cardinality event name in lowercase dotted words, such as `http.request`. |
+| name | VARCHAR | no | Stable, low cardinality event name in lowercase dotted words, such as `http.request`. Names taken from OpenTelemetry are kept as they are; see Mapping conventions. |
 | message | VARCHAR | yes | Human readable log text. Set only for logs. |
 | duration_ns | BIGINT | yes | Span length in nanoseconds. Set only for spans. |
 | trace_id | VARCHAR | yes | 32 lowercase hex characters (W3C / OpenTelemetry trace ID). |
@@ -122,6 +122,18 @@ Metric snapshot:
 - A periodic event. `name` is the metric group, such as `process.stats`.
 - `attrs` holds the numeric values.
 - Counters are cumulative since the process started. Gauges hold the current value.
+
+Resource:
+- `resource` is normally the same for every event of one writer. A writer may set it per event, for example an OpenTelemetry exporter that writes the resource of each export.
+
+From OpenTelemetry:
+- `name` keeps the OpenTelemetry name as it is, such as the span name `GET /users/:id`. OpenTelemetry already requires span, logger and metric names to be low cardinality, so these names need not be dotted words.
+- `resource` holds the attributes of the OpenTelemetry resource.
+- `attrs` holds the OpenTelemetry attributes. `otel.scope.name` and `otel.scope.version` name the instrumentation scope. Other OpenTelemetry fields that are not attributes use keys that start with `span.`, `log.` or `metric.`. When an attribute has the same key, the field is kept.
+- Values that JSON cannot hold are stored as text: bytes as base64, and `NaN` and infinite numbers as `"NaN"`, `"Infinity"` and `"-Infinity"`, which DuckDB casts to DOUBLE.
+- A span also sets `attrs["span.kind"]` (`internal`, `server`, `client`, `producer` or `consumer`). Each event of a span, such as an exception, is a row of its own: `name` is the event name, `ts` its time, `trace_id` and `span_id` those of the span, and it has no `duration_ns`.
+- A log record's `name` is its event name, or else its logger name. `message` is the body text, the JSON text of a structured body, or empty. `attrs.level` comes from the severity number; fatal is `error`.
+- A metric snapshot is one row per data point. `name` is the metric name and `ts` the end of the point. `attrs` holds the point attributes, `metric.type`, `metric.unit`, `metric.temporality`, `metric.start_ns` and `metric.value`: a number for a sum or a gauge, an object with `count`, `sum`, `min`, `max`, `explicit_bounds` and `bucket_counts` for a histogram, and an object with `count`, `sum`, `min`, `max`, `scale`, `zero_count`, `positive` and `negative` for an exponential histogram. With cumulative temporality, every value that changes between snapshots is inside `metric.value`, so `json_merge_patch(attrs, '{"metric.value":null}')` together with `resource` names one series.
 
 Telling them apart:
 - A span has `span_id IS NOT NULL AND duration_ns IS NOT NULL`.

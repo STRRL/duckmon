@@ -16,6 +16,7 @@ struct EventLine {
     span_id: Option<String>,
     parent_id: Option<String>,
     attrs: Option<Map<String, Value>>,
+    resource: Option<Map<String, Value>>,
 }
 
 /// The options JSON of `duckmon_open`.
@@ -71,6 +72,7 @@ fn event_from_line(line: &str) -> Result<Event, String> {
         span_id: line.span_id,
         parent_id: line.parent_id,
         attrs: line.attrs.unwrap_or_default(),
+        resource: line.resource,
     })
 }
 

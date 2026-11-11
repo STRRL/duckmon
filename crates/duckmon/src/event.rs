@@ -31,6 +31,8 @@ pub struct Event {
     pub parent_id: Option<String>,
     /// Empty map is stored as NULL.
     pub attrs: serde_json::Map<String, serde_json::Value>,
+    /// Replaces the store's resource for this event when set. An empty map is stored as NULL.
+    pub resource: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 impl Event {
@@ -45,6 +47,7 @@ impl Event {
             span_id: None,
             parent_id: None,
             attrs: serde_json::Map::new(),
+            resource: None,
         }
     }
 }
@@ -75,6 +78,7 @@ pub fn events_to_record_batch(
     let mut ts_values = Vec::with_capacity(events.len());
     let mut duration_values = Vec::with_capacity(events.len());
     let mut attrs_values = Vec::with_capacity(events.len());
+    let mut resource_values = Vec::with_capacity(events.len());
     let mut date_values = Vec::with_capacity(events.len());
     for event in events {
         let nanos = nanos_since_epoch(event.ts).ok_or_else(|| {
@@ -94,9 +98,15 @@ pub fn events_to_record_batch(
         } else {
             Some(json_text(&event.attrs)?)
         };
+        let event_resource_text = match &event.resource {
+            None => resource_text.clone(),
+            Some(map) if map.is_empty() => None,
+            Some(map) => Some(json_text(map)?),
+        };
         ts_values.push(nanos);
         duration_values.push(duration_ns);
         attrs_values.push(attrs_text);
+        resource_values.push(event_resource_text);
         date_values.push(date_from_nanos(nanos));
     }
 
@@ -105,7 +115,6 @@ pub fn events_to_record_batch(
     let trace_ids: Vec<Option<&str>> = events.iter().map(|e| e.trace_id.as_deref()).collect();
     let span_ids: Vec<Option<&str>> = events.iter().map(|e| e.span_id.as_deref()).collect();
     let parent_ids: Vec<Option<&str>> = events.iter().map(|e| e.parent_id.as_deref()).collect();
-    let resources: Vec<Option<&str>> = vec![resource_text.as_deref(); events.len()];
 
     let schema = Schema::new(vec![
         Field::new("ts", DataType::Timestamp(TimeUnit::Nanosecond, None), false),
@@ -127,7 +136,7 @@ pub fn events_to_record_batch(
         Arc::new(StringArray::from(trace_ids)),
         Arc::new(StringArray::from(span_ids)),
         Arc::new(StringArray::from(parent_ids)),
-        Arc::new(StringArray::from(resources)),
+        Arc::new(StringArray::from(resource_values)),
         Arc::new(StringArray::from(attrs_values)),
         Arc::new(Date32Array::from(date_values)),
     ];

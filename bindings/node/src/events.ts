@@ -31,24 +31,26 @@ export interface Event {
   /** Parent span ID of a span. Leave it out for a root span. */
   parentId?: string;
   attrs?: Attributes;
+  /** Replaces the store's resource for this event. `{}` stores NULL. */
+  resource?: Attributes;
 }
 
 /** The largest time or length the store can keep: 2^63 - 1 nanoseconds. */
-const LARGEST_NANOS = 2n ** 63n - 1n;
+export const LARGEST_NANOS = 2n ** 63n - 1n;
 
 /** The native JSON reader keeps a `bigint` exactly when it fits in 64 bits, signed or not. */
-const SMALLEST_ATTRIBUTE_BIGINT = -(2n ** 63n);
-const LARGEST_ATTRIBUTE_BIGINT = 2n ** 64n - 1n;
+export const SMALLEST_ATTRIBUTE_BIGINT = -(2n ** 63n);
+export const LARGEST_ATTRIBUTE_BIGINT = 2n ** 64n - 1n;
 
 /**
  * Deepest nesting of arrays and objects inside `attrs` or `resource`. The
  * native JSON reader accepts 128 levels for a whole line, and the line itself
  * takes two of them.
  */
-const MAX_ATTRIBUTE_DEPTH = 64;
+export const MAX_ATTRIBUTE_DEPTH = 64;
 
 /** `JSON.rawJSON` exists since Node 21, but the TypeScript library does not declare it yet. */
-const rawJSON = (JSON as unknown as { rawJSON(text: string): unknown }).rawJSON;
+export const rawJSON = (JSON as unknown as { rawJSON(text: string): unknown }).rawJSON;
 
 /** The current time as nanoseconds since 1970 UTC, with millisecond precision. */
 export function nowNanos(): bigint {
@@ -76,6 +78,7 @@ export function eventLine(event: Event): string {
   if (event.spanId !== undefined) line.span_id = text(event.spanId, "spanId");
   if (event.parentId !== undefined) line.parent_id = text(event.parentId, "parentId");
   if (event.attrs !== undefined) line.attrs = storableAttributes(event.attrs, "event attrs");
+  if (event.resource !== undefined) line.resource = storableAttributes(event.resource, "event resource");
   return JSON.stringify(line);
 }
 

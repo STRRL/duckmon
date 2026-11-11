@@ -111,8 +111,10 @@ pub unsafe extern "C" fn duckmon_open(
 
 /// Adds events, given as JSON Lines text: one JSON object per line with the
 /// keys `ts` (required, nanoseconds since 1970 UTC), `name` (required, not
-/// empty), `message`, `duration_ns`, `trace_id`, `span_id`, `parent_id` and
-/// `attrs` (a JSON object). Unknown keys are refused. Empty lines are skipped.
+/// empty), `message`, `duration_ns`, `trace_id`, `span_id`, `parent_id`,
+/// `attrs` (a JSON object) and `resource` (a JSON object that replaces the
+/// store's resource for this event; `{}` stores NULL). Unknown keys are
+/// refused. Empty lines are skipped.
 ///
 /// Every line is checked first. When one is wrong, nothing is written and the
 /// message names the line. Events reach a Parquet file at the next flush.

@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./opentelemetry": {
+      "types": "./dist/opentelemetry/index.d.ts",
+      "default": "./dist/opentelemetry/index.js"
     }
   },
   "files": [
@@ -24,6 +28,12 @@
     "apache-arrow": "21.2.0"
   },
   "devDependencies": {
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/instrumentation-http": "0.301.1",
+    "@opentelemetry/sdk-logs": "3.1.1",
+    "@opentelemetry/sdk-metrics": "3.1.1",
+    "@opentelemetry/sdk-node": "0.301.1",
+    "@opentelemetry/sdk-trace": "3.1.1",
     "@types/node": "22.20.5",
     "typescript": "7.0.2"
   }

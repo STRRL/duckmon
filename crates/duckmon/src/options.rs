@@ -7,7 +7,7 @@ pub struct Options {
     pub flush_interval: Duration,
     /// How many write_events batches may wait for the writer thread. Default 1024.
     pub channel_capacity: usize,
-    /// Stored in the resource column of every event this store writes. Empty is stored as NULL.
+    /// Stored in the resource column of every event this store writes that sets no resource of its own. Empty is stored as NULL.
     pub resource: serde_json::Map<String, serde_json::Value>,
 }
 
