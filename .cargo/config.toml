@@ -1,0 +1,5 @@
+# Build C and C++ code for the same oldest macOS as Rust code (11.0), so
+# programs that link libduckmon_ffi.a, such as Go programs, get no linker
+# warning about objects built for a newer macOS.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "11.0"
