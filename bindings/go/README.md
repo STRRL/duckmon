@@ -4,9 +4,21 @@ An embedded telemetry store. Your application writes logs, spans and metric snap
 
 The package `duckmon` (module `github.com/strrl/duckmon/bindings/go`) calls the duckmon C ABI through cgo and links the static library `libduckmon_ffi.a` into your binary.
 
-## Build
+## Install
 
-You need Go 1.26 or later, a C compiler and Rust. The module is not published yet, and the module alone does not build: it needs the header and the static library of a duckmon clone. From the root of the clone:
+You need Go 1.26 or later and a C compiler; Rust is not needed. The module links a prebuilt static library, carried by a small platform module that this module imports for your platform:
+
+```sh
+go get github.com/strrl/duckmon/bindings/go@latest
+```
+
+Import it as `duckmon "github.com/strrl/duckmon/bindings/go"`. The first build of your program links the library, which takes a few seconds; after that the Go build cache makes it fast.
+
+Prebuilt libraries exist for linux/amd64, linux/arm64 and darwin/arm64. On another platform, build the library yourself as described under Local development. Not supported yet: Windows and cross compilation.
+
+## Local development
+
+To work on duckmon itself, or to use the package on a platform without a prebuilt library, build the library from a clone of the repository:
 
 ```sh
 cargo build -p duckmon-ffi --release
@@ -14,29 +26,49 @@ cargo build -p duckmon-ffi --release
 
 This writes `target/release/libduckmon_ffi.a`. When `CARGO_TARGET_DIR` is set in your environment, add `--target-dir target`, because the package looks for the library in `target/release` of the clone.
 
-Then run the example from `bindings/go`:
+Then build with the tag `duckmon_local`, which links that library instead of a prebuilt one. Run the example from `bindings/go`:
 
 ```sh
 cd bindings/go
-go run ./examples/roundtrip write /tmp/store 3000 0
+go run -tags duckmon_local ./examples/roundtrip write /tmp/store 3000 0
 ```
 
-To use the package from your own module, point it at the clone and let Go fill in `go.sum`:
+To use the clone from your own module, point Go at it:
 
 ```sh
 go mod edit -require=github.com/strrl/duckmon/bindings/go@v0.0.0
 go mod edit -replace=github.com/strrl/duckmon/bindings/go=/path/to/duckmon/bindings/go
 go mod tidy
+go build -tags duckmon_local ./...
 ```
 
-`go work use /path/to/duckmon/bindings/go` works too. Import it as `duckmon "github.com/strrl/duckmon/bindings/go"`.
+`go work use /path/to/duckmon/bindings/go` works too.
+
+The `go.mod` of this module requires the platform library modules. When Go cannot resolve their versions, for example on a commit whose versions are not tagged yet, create a `go.work` at the root of the clone (`go.work` is ignored by git):
+
+```
+go 1.26.0
+
+use (
+	./bindings/go
+	./bindings/lib/darwin-arm64
+	./bindings/lib/linux-amd64
+	./bindings/lib/linux-arm64
+)
+
+replace (
+	github.com/STRRL/duckmon/bindings/lib/darwin-arm64 v0.0.0 => ./bindings/lib/darwin-arm64
+	github.com/STRRL/duckmon/bindings/lib/linux-amd64 v0.0.0 => ./bindings/lib/linux-amd64
+	github.com/STRRL/duckmon/bindings/lib/linux-arm64 v0.0.0 => ./bindings/lib/linux-arm64
+)
+```
+
+The version in the replace lines is the version that `go.mod` requires. The replace lines carry a version on purpose: a plain `use` is not enough, because Go still reads the `go.mod` of every required version while it builds the module graph.
 
 When the build fails:
 
-- `no such file` naming `.../target/release/libduckmon_ffi.a`: run the `cargo build` above.
-- `'duckmon.h' file not found`: the module came from the module proxy. Use `replace` or `go work` with a local clone.
-
-Supported: macOS and Linux. The macOS link flags are checked on darwin/arm64. The Linux link flags are not checked yet. Not supported yet: Windows, prebuilt libraries and cross compilation.
+- `no such file` naming `.../target/release/libduckmon_ffi.a`: run the `cargo build` above, or drop `-tags duckmon_local` to link a prebuilt library.
+- `undefined` duckmon symbols at link time without `duckmon_local`: no prebuilt library exists for this platform; build locally with the tag.
 
 ## Linking
 
