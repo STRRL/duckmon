@@ -1,0 +1,170 @@
+name: release-go-binding
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the leading v, for example 0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux-amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64
+          - runner: macos-14
+            platform: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check the version input
+        run: |
+          echo "${{ inputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the static library
+        run: cargo build -p duckmon-ffi --release
+      - name: Strip and split the library
+        run: ./scripts/split-static-lib.sh target/release/libduckmon_ffi.a out 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lib-${{ matrix.platform }}
+          path: out/libduckmon_ffi_*.a
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Remove the previous libraries
+        run: rm -f bindings/lib/*/libduckmon_ffi_*.a
+      - uses: actions/download-artifact@v4
+        with:
+          name: lib-linux-amd64
+          path: bindings/lib/linux-amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: lib-linux-arm64
+          path: bindings/lib/linux-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: lib-darwin-arm64
+          path: bindings/lib/darwin-arm64
+      - name: Commit the libraries and tag the platform modules
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bindings/lib/linux-amd64 bindings/lib/linux-arm64 bindings/lib/darwin-arm64
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: add prebuilt duckmon libraries v${VERSION}"
+          fi
+          git tag "bindings/lib/linux-amd64/v${VERSION}"
+          git tag "bindings/lib/linux-arm64/v${VERSION}"
+          git tag "bindings/lib/darwin-arm64/v${VERSION}"
+      - name: Point the Go binding at the new libraries and tag it
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          cd bindings/go
+          go mod edit \
+            -require="github.com/STRRL/duckmon/bindings/lib/linux-amd64@v${VERSION}" \
+            -require="github.com/STRRL/duckmon/bindings/lib/linux-arm64@v${VERSION}" \
+            -require="github.com/STRRL/duckmon/bindings/lib/darwin-arm64@v${VERSION}"
+          cd ../..
+          git add bindings/go/go.mod
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: release Go binding v${VERSION}"
+          fi
+          git tag "bindings/go/v${VERSION}"
+      - name: Push main and the tags
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          git push --atomic origin \
+            main \
+            "bindings/lib/linux-amd64/v${VERSION}" \
+            "bindings/lib/linux-arm64/v${VERSION}" \
+            "bindings/lib/darwin-arm64/v${VERSION}" \
+            "bindings/go/v${VERSION}"
+
+  verify:
+    needs: publish
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+          - runner: ubuntu-24.04-arm
+          - runner: macos-14
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Fetch the released module, with retries for proxy lag
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          mkdir verify
+          cd verify
+          go mod init example.com/verify
+          for attempt in $(seq 1 20); do
+            if go get "github.com/strrl/duckmon/bindings/go@v${VERSION}"; then
+              exit 0
+            fi
+            echo "attempt ${attempt} failed, waiting before the next one"
+            sleep 30
+          done
+          echo "the module never became available" >&2
+          exit 1
+      - name: Write events and read them back
+        run: |
+          set -euo pipefail
+          cd verify
+          cat > main.go <<'EOF'
+          package main
+
+          import (
+          	"fmt"
+          	"log"
+
+          	duckmon "github.com/strrl/duckmon/bindings/go"
+          )
+
+          func main() {
+          	store, err := duckmon.Open("store", duckmon.Options{})
+          	if err != nil {
+          		log.Fatal(err)
+          	}
+          	for i := 0; i < 100; i++ {
+          		if err := store.Write(duckmon.Event{Name: "verify.event"}); err != nil {
+          			log.Fatal(err)
+          		}
+          	}
+          	result, err := store.Query("SELECT count(*) FROM events")
+          	if err != nil {
+          		log.Fatal(err)
+          	}
+          	count := result.Rows[0][0].(int64)
+          	if count != 100 {
+          		log.Fatalf("wrote 100 events, read back %d", count)
+          	}
+          	if err := store.Close(); err != nil {
+          		log.Fatal(err)
+          	}
+          	fmt.Println("verify ok")
+          }
+          EOF
+          go mod tidy
+          go run .
