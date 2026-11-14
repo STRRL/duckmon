@@ -3,9 +3,7 @@
 package duckmon
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../crates/duckmon-ffi/include
-#cgo darwin LDFLAGS: ${SRCDIR}/../../target/release/libduckmon_ffi.a -lc++ -liconv -framework CoreFoundation
-#cgo linux LDFLAGS: ${SRCDIR}/../../target/release/libduckmon_ffi.a -lstdc++ -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
+#cgo CFLAGS: -I${SRCDIR}/include
 #include <stdlib.h>
 #include <string.h>
 #include "duckmon.h"

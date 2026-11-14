@@ -2,3 +2,5 @@ target
 bindings/node/node_modules
 bindings/node/dist
 bindings/node/duckmon.node
+go.work
+go.work.sum
