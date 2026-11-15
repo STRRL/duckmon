@@ -29,6 +29,10 @@ if [ "$(uname)" = "Darwin" ]; then
 	strip -S "$WORK_DIR/full.a"
 else
 	objcopy --strip-debug "$WORK_DIR/full.a"
+	# Remove the embedded LLVM bitcode. The Go toolchain refuses archives
+	# that still hold bitcode sections (CVE-2026-97038). On Darwin the
+	# bitcode is removed per object further down.
+	objcopy --remove-section=.llvmbc --remove-section=.llvmcmd "$WORK_DIR/full.a"
 fi
 echo "stripped size: $(wc -c < "$WORK_DIR/full.a") bytes"
 
@@ -41,6 +45,15 @@ fi
 
 mkdir "$WORK_DIR/objects"
 (cd "$WORK_DIR/objects" && ar x ../full.a)
+
+if [ "$(uname)" = "Darwin" ]; then
+	# Remove the embedded LLVM bitcode segment from every object. The Go
+	# toolchain refuses archives that still hold a __LLVM segment.
+	BITCODE_STRIP="$(xcrun -f bitcode_strip)"
+	(cd "$WORK_DIR/objects" && for member in *; do
+		"$BITCODE_STRIP" -r "$member" -o "$member"
+	done)
+fi
 
 # Walk the members in archive order and start a new part when the current
 # one reaches an equal share of the total size.
@@ -79,6 +92,15 @@ for number in $(seq 1 "$PARTS"); do
 	echo "$PART: $SIZE bytes"
 	if [ "$SIZE" -ge "$MAX_PART_BYTES" ]; then
 		echo "error: $PART is $SIZE bytes, which is over the 95 MB limit; raise the part count" >&2
+		exit 1
+	fi
+	if [ "$(uname)" = "Darwin" ]; then
+		LTO_MARKER="__LLVM"
+	else
+		LTO_MARKER=".llvmbc"
+	fi
+	if LC_ALL=C grep -q "$LTO_MARKER" "$PART"; then
+		echo "error: $PART still holds LLVM bitcode, which the Go toolchain refuses" >&2
 		exit 1
 	fi
 done
