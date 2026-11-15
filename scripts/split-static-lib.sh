@@ -25,13 +25,22 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 cp "$INPUT" "$WORK_DIR/full.a"
 echo "input size: $(wc -c < "$WORK_DIR/full.a") bytes"
 
+# Besides the debug sections, remove the embedded LLVM bitcode. The Go
+# toolchain refuses archives that still hold bitcode sections or a
+# __LLVM segment (CVE-2026-97038).
 if [ "$(uname)" = "Darwin" ]; then
 	strip -S "$WORK_DIR/full.a"
+	# Apple does not ship llvm-objcopy, so use the one from the rust
+	# llvm-tools component, which lives in the rustc sysroot.
+	SYSROOT="$(rustc --print sysroot)"
+	HOST="$(rustc -vV | sed -n 's/^host: //p')"
+	DYLD_LIBRARY_PATH="$SYSROOT/lib" LD_LIBRARY_PATH="$SYSROOT/lib" \
+		"$SYSROOT/lib/rustlib/$HOST/bin/rust-objcopy" \
+		--remove-section=__LLVM,__bitcode \
+		--remove-section=__LLVM,__cmdline \
+		"$WORK_DIR/full.a"
 else
 	objcopy --strip-debug "$WORK_DIR/full.a"
-	# Remove the embedded LLVM bitcode. The Go toolchain refuses archives
-	# that still hold bitcode sections (CVE-2026-97038). On Darwin the
-	# bitcode is removed per object further down.
 	objcopy --remove-section=.llvmbc --remove-section=.llvmcmd "$WORK_DIR/full.a"
 fi
 echo "stripped size: $(wc -c < "$WORK_DIR/full.a") bytes"
@@ -45,15 +54,6 @@ fi
 
 mkdir "$WORK_DIR/objects"
 (cd "$WORK_DIR/objects" && ar x ../full.a)
-
-if [ "$(uname)" = "Darwin" ]; then
-	# Remove the embedded LLVM bitcode segment from every object. The Go
-	# toolchain refuses archives that still hold a __LLVM segment.
-	BITCODE_STRIP="$(xcrun -f bitcode_strip)"
-	(cd "$WORK_DIR/objects" && for member in *; do
-		"$BITCODE_STRIP" -r "$member" -o "$member"
-	done)
-fi
 
 # Walk the members in archive order and start a new part when the current
 # one reaches an equal share of the total size.

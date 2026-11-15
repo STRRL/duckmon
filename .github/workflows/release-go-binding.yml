@@ -28,6 +28,8 @@ jobs:
           echo "${{ inputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
       - name: Build the static library
         run: cargo build -p duckmon-ffi --release
       - name: Strip and split the library
