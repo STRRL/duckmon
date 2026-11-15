@@ -32,8 +32,10 @@ else
 fi
 echo "stripped size: $(wc -c < "$WORK_DIR/full.a") bytes"
 
-if ar t "$WORK_DIR/full.a" | sort | uniq -d | grep -q .; then
-	echo "error: the archive holds two members with the same name" >&2
+DUPLICATE_MEMBERS="$(ar t "$WORK_DIR/full.a" | sort | uniq -d)"
+if [ -n "$DUPLICATE_MEMBERS" ]; then
+	echo "error: the archive holds two members with the same name:" >&2
+	echo "$DUPLICATE_MEMBERS" >&2
 	exit 1
 fi
 
