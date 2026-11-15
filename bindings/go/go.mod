@@ -3,9 +3,9 @@ module github.com/STRRL/duckmon/bindings/go
 go 1.26.0
 
 require (
-	github.com/STRRL/duckmon/bindings/lib/darwin-arm64 v0.0.0
-	github.com/STRRL/duckmon/bindings/lib/linux-amd64 v0.0.0
-	github.com/STRRL/duckmon/bindings/lib/linux-arm64 v0.0.0
+	github.com/STRRL/duckmon/bindings/lib/darwin-arm64 v0.1.0
+	github.com/STRRL/duckmon/bindings/lib/linux-amd64 v0.1.0
+	github.com/STRRL/duckmon/bindings/lib/linux-arm64 v0.1.0
 	github.com/apache/arrow-go/v18 v18.8.0
 )
 
