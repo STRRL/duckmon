@@ -120,7 +120,7 @@ jobs:
           cd verify
           go mod init example.com/verify
           for attempt in $(seq 1 20); do
-            if go get "github.com/strrl/duckmon/bindings/go@v${VERSION}"; then
+            if go get "github.com/STRRL/duckmon/bindings/go@v${VERSION}"; then
               exit 0
             fi
             echo "attempt ${attempt} failed, waiting before the next one"
@@ -139,7 +139,7 @@ jobs:
           	"fmt"
           	"log"
 
-          	duckmon "github.com/strrl/duckmon/bindings/go"
+          	duckmon "github.com/STRRL/duckmon/bindings/go"
           )
 
           func main() {

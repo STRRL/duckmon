@@ -2,17 +2,17 @@
 
 An embedded telemetry store. Your application writes logs, spans and metric snapshots as events. They land as Parquet files in a directory, and you query them with SQL through an in process DuckDB. Many processes may share one directory. The file format is described in `docs/contract.md` of the duckmon repository.
 
-The package `duckmon` (module `github.com/strrl/duckmon/bindings/go`) calls the duckmon C ABI through cgo and links the static library `libduckmon_ffi.a` into your binary.
+The package `duckmon` (module `github.com/STRRL/duckmon/bindings/go`) calls the duckmon C ABI through cgo and links the static library `libduckmon_ffi.a` into your binary.
 
 ## Install
 
 You need Go 1.26 or later and a C compiler; Rust is not needed. The module links a prebuilt static library, carried by a small platform module that this module imports for your platform:
 
 ```sh
-go get github.com/strrl/duckmon/bindings/go@latest
+go get github.com/STRRL/duckmon/bindings/go@latest
 ```
 
-Import it as `duckmon "github.com/strrl/duckmon/bindings/go"`. The first build of your program links the library, which takes a few seconds; after that the Go build cache makes it fast.
+Import it as `duckmon "github.com/STRRL/duckmon/bindings/go"`. The first build of your program links the library, which takes a few seconds; after that the Go build cache makes it fast.
 
 Prebuilt libraries exist for linux/amd64, linux/arm64 and darwin/arm64. On another platform, build the library yourself as described under Local development. Not supported yet: Windows and cross compilation.
 
@@ -36,8 +36,8 @@ go run -tags duckmon_local ./examples/roundtrip write /tmp/store 3000 0
 To use the clone from your own module, point Go at it:
 
 ```sh
-go mod edit -require=github.com/strrl/duckmon/bindings/go@v0.0.0
-go mod edit -replace=github.com/strrl/duckmon/bindings/go=/path/to/duckmon/bindings/go
+go mod edit -require=github.com/STRRL/duckmon/bindings/go@v0.0.0
+go mod edit -replace=github.com/STRRL/duckmon/bindings/go=/path/to/duckmon/bindings/go
 go mod tidy
 go build -tags duckmon_local ./...
 ```
@@ -89,7 +89,7 @@ import (
 	"runtime"
 	"time"
 
-	duckmon "github.com/strrl/duckmon/bindings/go"
+	duckmon "github.com/STRRL/duckmon/bindings/go"
 )
 
 func main() {
@@ -296,7 +296,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	duckmon "github.com/strrl/duckmon/bindings/go"
+	duckmon "github.com/STRRL/duckmon/bindings/go"
 )
 
 func main() { os.Exit(run()) }
@@ -354,4 +354,4 @@ duckdb -c "SELECT count(*) FROM read_parquet('/tmp/store/date=*/*.parquet', hive
 
 ## OpenTelemetry
 
-Exporters for the OpenTelemetry Go SDK are planned as the module `github.com/strrl/duckmon/bindings/go/opentelemetry`, so this module stays free of OpenTelemetry dependencies.
+Exporters for the OpenTelemetry Go SDK are planned as the module `github.com/STRRL/duckmon/bindings/go/opentelemetry`, so this module stays free of OpenTelemetry dependencies.

@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	duckmon "github.com/strrl/duckmon/bindings/go"
+	duckmon "github.com/STRRL/duckmon/bindings/go"
 )
 
 func main() {

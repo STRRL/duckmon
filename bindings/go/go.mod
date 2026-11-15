@@ -1,4 +1,4 @@
-module github.com/strrl/duckmon/bindings/go
+module github.com/STRRL/duckmon/bindings/go
 
 go 1.26.0
 
