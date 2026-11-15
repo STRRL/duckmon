@@ -30,15 +30,11 @@ echo "input size: $(wc -c < "$WORK_DIR/full.a") bytes"
 # __LLVM segment (CVE-2026-97038).
 if [ "$(uname)" = "Darwin" ]; then
 	strip -S "$WORK_DIR/full.a"
-	# Apple does not ship llvm-objcopy, so use the one from the rust
-	# llvm-tools component, which lives in the rustc sysroot.
+	# The bitcode is removed from the finished parts further down, because
+	# Apple ar cannot extract an archive that llvm-objcopy has rewritten.
 	SYSROOT="$(rustc --print sysroot)"
 	HOST="$(rustc -vV | sed -n 's/^host: //p')"
-	DYLD_LIBRARY_PATH="$SYSROOT/lib" LD_LIBRARY_PATH="$SYSROOT/lib" \
-		"$SYSROOT/lib/rustlib/$HOST/bin/rust-objcopy" \
-		--remove-section=__LLVM,__bitcode \
-		--remove-section=__LLVM,__cmdline \
-		"$WORK_DIR/full.a"
+	RUST_OBJCOPY="$SYSROOT/lib/rustlib/$HOST/bin/rust-objcopy"
 else
 	objcopy --strip-debug "$WORK_DIR/full.a"
 	objcopy --remove-section=.llvmbc --remove-section=.llvmcmd "$WORK_DIR/full.a"
@@ -88,6 +84,15 @@ for number in $(seq 1 "$PARTS"); do
 	PART="$OUTPUT_DIR/${NAME}_${number}.a"
 	rm -f "$PART"
 	(cd "$WORK_DIR/objects" && xargs ar rcs "$PART" < "../part_${number}.txt")
+	if [ "$(uname)" = "Darwin" ]; then
+		# Apple does not ship llvm-objcopy, so use the one from the rust
+		# llvm-tools component, which lives in the rustc sysroot.
+		DYLD_LIBRARY_PATH="$SYSROOT/lib" LD_LIBRARY_PATH="$SYSROOT/lib" \
+			"$RUST_OBJCOPY" \
+			--remove-section=__LLVM,__bitcode \
+			--remove-section=__LLVM,__cmdline \
+			"$PART"
+	fi
 	SIZE="$(wc -c < "$PART")"
 	echo "$PART: $SIZE bytes"
 	if [ "$SIZE" -ge "$MAX_PART_BYTES" ]; then
