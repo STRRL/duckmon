@@ -6,7 +6,7 @@ The package `duckmon` (module `github.com/STRRL/duckmon/bindings/go`) calls the 
 
 ## Install
 
-You need Go 1.26 or later and a C compiler; Rust is not needed. The module links a prebuilt static library, carried by a small platform module that this module imports for your platform:
+You need Go 1.26 or later and a C compiler; Rust is not needed. The module links a prebuilt static library, carried by a small platform module that this module imports for your platform. The platform modules live in the repository `github.com/STRRL/duckmon-prebuilt` as `github.com/STRRL/duckmon-prebuilt/linux-amd64`, `github.com/STRRL/duckmon-prebuilt/linux-arm64` and `github.com/STRRL/duckmon-prebuilt/darwin-arm64`:
 
 ```sh
 go get github.com/STRRL/duckmon/bindings/go@latest
@@ -44,22 +44,22 @@ go build -tags duckmon_local ./...
 
 `go work use /path/to/duckmon/bindings/go` works too.
 
-The `go.mod` of this module requires the platform library modules. When Go cannot resolve their versions, for example on a commit whose versions are not tagged yet, create a `go.work` at the root of the clone (`go.work` is ignored by git):
+The `go.mod` of this module requires the platform library modules. To try libraries that are not tagged yet, clone `github.com/STRRL/duckmon-prebuilt` next to the duckmon clone and create a `go.work` at the root of the duckmon clone (`go.work` is ignored by git):
 
 ```
 go 1.26.0
 
 use (
 	./bindings/go
-	./bindings/lib/darwin-arm64
-	./bindings/lib/linux-amd64
-	./bindings/lib/linux-arm64
+	../duckmon-prebuilt/darwin-arm64
+	../duckmon-prebuilt/linux-amd64
+	../duckmon-prebuilt/linux-arm64
 )
 
 replace (
-	github.com/STRRL/duckmon/bindings/lib/darwin-arm64 v0.0.0 => ./bindings/lib/darwin-arm64
-	github.com/STRRL/duckmon/bindings/lib/linux-amd64 v0.0.0 => ./bindings/lib/linux-amd64
-	github.com/STRRL/duckmon/bindings/lib/linux-arm64 v0.0.0 => ./bindings/lib/linux-arm64
+	github.com/STRRL/duckmon-prebuilt/darwin-arm64 v0.1.1 => ../duckmon-prebuilt/darwin-arm64
+	github.com/STRRL/duckmon-prebuilt/linux-amd64 v0.1.1 => ../duckmon-prebuilt/linux-amd64
+	github.com/STRRL/duckmon-prebuilt/linux-arm64 v0.1.1 => ../duckmon-prebuilt/linux-arm64
 )
 ```
 

@@ -6,9 +6,9 @@ go 1.26.0
 retract v0.1.0
 
 require (
-	github.com/STRRL/duckmon/bindings/lib/darwin-arm64 v0.1.1
-	github.com/STRRL/duckmon/bindings/lib/linux-amd64 v0.1.1
-	github.com/STRRL/duckmon/bindings/lib/linux-arm64 v0.1.1
+	github.com/STRRL/duckmon-prebuilt/darwin-arm64 v0.1.1
+	github.com/STRRL/duckmon-prebuilt/linux-amd64 v0.1.1
+	github.com/STRRL/duckmon-prebuilt/linux-arm64 v0.1.1
 	github.com/apache/arrow-go/v18 v18.8.0
 )
 

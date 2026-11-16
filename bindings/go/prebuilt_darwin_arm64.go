@@ -4,4 +4,4 @@ package duckmon
 
 // The imported module carries the prebuilt static library and the link
 // flags for this platform.
-import _ "github.com/STRRL/duckmon/bindings/lib/darwin-arm64"
+import _ "github.com/STRRL/duckmon-prebuilt/darwin-arm64"

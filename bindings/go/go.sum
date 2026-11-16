@@ -1,3 +1,9 @@
+github.com/STRRL/duckmon-prebuilt/darwin-arm64 v0.1.1 h1:8QIejSYZqHHbgR5IzCtu2NOBgxpRZhVGfKyWfK38tHc=
+github.com/STRRL/duckmon-prebuilt/darwin-arm64 v0.1.1/go.mod h1:6UCIwxMqugmJtTrc4Hj7KeDHd9NB9lAqfkQqBvmOyA0=
+github.com/STRRL/duckmon-prebuilt/linux-amd64 v0.1.1 h1:Zm/aNJy1OlbzySc2FTDcLueWSTcwoPHZB5R1KzMjq0A=
+github.com/STRRL/duckmon-prebuilt/linux-amd64 v0.1.1/go.mod h1:P5Et1snmqzsTiPojbRVqTRptuI4W9WC1w4hVsmAGwZ4=
+github.com/STRRL/duckmon-prebuilt/linux-arm64 v0.1.1 h1:WZ8XbYLa5rsQC/ID/bGOWNYqSdOGE1dqXdCW/IL43bY=
+github.com/STRRL/duckmon-prebuilt/linux-arm64 v0.1.1/go.mod h1:ES08aBiwdJ7z9kUjuVXvE3WBsgkRfWyEqVjJYk8I54Y=
 github.com/andybalholm/brotli v1.2.3 h1:8H1qwOkl2LPfjf3YezB90JnCliZb6SInJ/OJkEbA5NQ=
 github.com/andybalholm/brotli v1.2.3/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/apache/arrow-go/v18 v18.8.0 h1:BLOzbPv7bxMPgXPacAg6HQjnxupYsZzC4tf+FkqPU/M=

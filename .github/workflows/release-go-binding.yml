@@ -48,58 +48,70 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+      - uses: actions/checkout@v4
+        with:
+          repository: STRRL/duckmon-prebuilt
+          ref: main
+          path: prebuilt
+          ssh-key: ${{ secrets.PREBUILT_DEPLOY_KEY }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
       - name: Remove the previous libraries
-        run: rm -f bindings/lib/*/libduckmon_ffi_*.a
+        run: rm -f prebuilt/*/libduckmon_ffi_*.a
       - uses: actions/download-artifact@v4
         with:
           name: lib-linux-amd64
-          path: bindings/lib/linux-amd64
+          path: prebuilt/linux-amd64
       - uses: actions/download-artifact@v4
         with:
           name: lib-linux-arm64
-          path: bindings/lib/linux-arm64
+          path: prebuilt/linux-arm64
       - uses: actions/download-artifact@v4
         with:
           name: lib-darwin-arm64
-          path: bindings/lib/darwin-arm64
-      - name: Commit the libraries and tag the platform modules
+          path: prebuilt/darwin-arm64
+      - name: Commit the libraries, tag the platform modules and push them
+        working-directory: prebuilt
         run: |
           set -euo pipefail
           VERSION="${{ inputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bindings/lib/linux-amd64 bindings/lib/linux-arm64 bindings/lib/darwin-arm64
+          git add linux-amd64 linux-arm64 darwin-arm64
           if ! git diff --cached --quiet; then
             git commit -m "feat: add prebuilt duckmon libraries v${VERSION}"
           fi
-          git tag "bindings/lib/linux-amd64/v${VERSION}"
-          git tag "bindings/lib/linux-arm64/v${VERSION}"
-          git tag "bindings/lib/darwin-arm64/v${VERSION}"
+          git tag "linux-amd64/v${VERSION}"
+          git tag "linux-arm64/v${VERSION}"
+          git tag "darwin-arm64/v${VERSION}"
+          git push --atomic origin \
+            main \
+            "linux-amd64/v${VERSION}" \
+            "linux-arm64/v${VERSION}" \
+            "darwin-arm64/v${VERSION}"
       - name: Point the Go binding at the new libraries and tag it
         run: |
           set -euo pipefail
           VERSION="${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           cd bindings/go
           go mod edit \
-            -require="github.com/STRRL/duckmon/bindings/lib/linux-amd64@v${VERSION}" \
-            -require="github.com/STRRL/duckmon/bindings/lib/linux-arm64@v${VERSION}" \
-            -require="github.com/STRRL/duckmon/bindings/lib/darwin-arm64@v${VERSION}"
+            -require="github.com/STRRL/duckmon-prebuilt/linux-amd64@v${VERSION}" \
+            -require="github.com/STRRL/duckmon-prebuilt/linux-arm64@v${VERSION}" \
+            -require="github.com/STRRL/duckmon-prebuilt/darwin-arm64@v${VERSION}"
+          # go.sum needs the hashes of the new platform modules. The proxy may
+          # lag behind the new tags, so fetch these modules straight from GitHub.
+          GONOPROXY=github.com/STRRL/duckmon-prebuilt go mod tidy
           cd ../..
-          git add bindings/go/go.mod
+          git add bindings/go/go.mod bindings/go/go.sum
           if ! git diff --cached --quiet; then
             git commit -m "feat: release Go binding v${VERSION}"
           fi
           git tag "bindings/go/v${VERSION}"
-      - name: Push main and the tags
-        run: |
-          set -euo pipefail
-          VERSION="${{ inputs.version }}"
-          git push --atomic origin \
-            main \
-            "bindings/lib/linux-amd64/v${VERSION}" \
-            "bindings/lib/linux-arm64/v${VERSION}" \
-            "bindings/lib/darwin-arm64/v${VERSION}" \
-            "bindings/go/v${VERSION}"
+          git push --atomic origin main "bindings/go/v${VERSION}"
 
   verify:
     needs: publish
